@@ -10,9 +10,6 @@ const char* password = "rHGMRSNqyFjY";
 #define LED_PIN 8
 WebServer server(80);
 
-// COMENTADO: Variável de tempo da serial removida para liberar o loop
-// unsigned long tempoSerial = 0;
-
 String paginaHTML() {
   return R"rawliteral(
 <!DOCTYPE html>
@@ -69,41 +66,39 @@ void setup() {
 
   Serial.println("\n\n--- INICIALIZANDO SERVIDOR HTTP ---");
 
-  // Configura e dispara o Wi-Fi em segundo plano
+  // Configura e dispara o Wi-Fi
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(100);
+  
+  Serial.print("[WIFI] Conectando-se a rede: ");
+  Serial.println(ssid);
   WiFi.begin(ssid, password);
+
+  // Aguarda a associação e conexão com o roteador terminar
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  // --- IMPRESSÃO ÚNICA DO IP ---
+  Serial.println("\n[WIFI] Wi-Fi conectado com sucesso!");
+  Serial.print("[INFO] Online | IP: ");
+  Serial.println(WiFi.localIP());
 
   // Rotas preparadas
   server.on("/", handleRoot);
   server.on("/on", handleLedOn);
   server.on("/off", handleLedOff);
+
+  // Inicializa o servidor web definitivamente aqui
+  server.begin();
+  Serial.println("[SERVER] Servidor pronto! Acesse pelo navegador.");
 }
 
 void loop() {
-  // COMENTADO: Envio periódico de status removido para deixar a serial 100% livre
-  /*
-  unsigned long tempoAtual = millis();
-  if (tempoAtual - tempoSerial > 4000) {
-    tempoSerial = tempoAtual;
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.print("[INFO] Online | IP: ");
-      Serial.println(WiFi.localIP());
-    } else {
-      Serial.println("[INFO] Tentando reconectar ao WiFi...");
-    }
-  }
-  */
-
-  // Se o Wi-Fi estiver conectado, processa os comandos HTTP do navegador
+  // Processa de forma contínua as requisições HTTP do navegador sem travar a CPU
   if (WiFi.status() == WL_CONNECTED) {
-    static bool servidorIniciado = false;
-    if (!servidorIniciado) {
-      server.begin();
-      servidorIniciado = true;
-      Serial.println("[SERVER] Servidor pronto! Acesse pelo navegador.");
-    }
     server.handleClient();
   }
 }
