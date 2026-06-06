@@ -70,17 +70,25 @@ void setup() {
   // Configura o Wi-Fi para operar como Ponto de Acesso (AP)
   WiFi.mode(WIFI_AP);
   WiFi.disconnect();
-  delay(100);
+  delay(200); // Tempo para o rádio limpar estados anteriores
   
   // Inicializa a rede sem fio própria do chip
   WiFi.softAP(ap_ssid, ap_password);
+
+  // --- CORREÇÃO DO ESP32-C3: AGUARDA O IP DO AP FICAR VÁLIDO ---
+  // Evita ler o IP enquanto a interface DHCP interna do chip ainda está subindo
+  IPAddress apIP = WiFi.softAPIP();
+  while (apIP.toString() == "0.0.0.0") {
+    delay(100);
+    apIP = WiFi.softAPIP();
+  }
 
   // --- IMPRESSÃO ÚNICA DO IP ---
   Serial.println("[WIFI] Rede Wi-Fi criada com sucesso!");
   Serial.print("[WIFI] SSID (Nome da Rede): ");
   Serial.println(ap_ssid);
   Serial.print("[INFO] Online | IP: ");
-  Serial.println(WiFi.softAPIP()); // Exibe 192.168.4.1 exatamente uma única vez
+  Serial.println(apIP); // Exibe 192.168.4.1 exatamente uma única vez
 
   // Rotas preparadas
   server.on("/", handleRoot);
@@ -93,6 +101,6 @@ void setup() {
 }
 
 void loop() {
-  // Processa continuamente as requisições sem validações externas de roteador
+  // Processa continuamente as requisições
   server.handleClient();
 }
