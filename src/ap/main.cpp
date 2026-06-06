@@ -1,14 +1,52 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <HTTPClient.h> // OBRIGATÓRIO: Resolve o erro de 'HTTPClient'
 
 // Configurações da rede Wi-Fi que o ESP32 vai criar (Modo AP)
 const char* ap_ssid = "Plug-Shelly-AP"; 
-const char* ap_password = "123456789"; // Mínimo de 8 caracteres
+const char* ap_password = "123456789"; 
 
-// LED onboard do ESP32-C3 Super Mini
+// IP fixo que o Shelly recebeu na sua rede
+const char* shelly_ip = "192.168.4.2"; 
+
 #define LED_PIN 8
 WebServer server(80);
+
+void enviarComandoShelly(bool ligar) {
+  HTTPClient http;
+  
+  // Endpoint oficial RPC para controle de relé na linha Shelly Plus (Gen2)
+  String url = "http://" + String(shelly_ip) + "/rpc/Switch.Set";
+  
+  Serial.print("[SHELLY] Enviando comando POST para: ");
+  Serial.println(url);
+
+  http.begin(url);
+  
+  // Configura os cabeçalhos exigidos pelo firmware Shelly Plus
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Connection", "close");
+
+  // Monta o corpo do JSON estruturado: {"id": 0, "on": true/false}
+  String jsonPayload = "{\"id\":0,\"on\":" + String(ligar ? "true" : "false") + "}";
+
+  // Envia a requisição usando POST passando o payload JSON
+  int httpCode = http.POST(jsonPayload); 
+
+  if (httpCode > 0) {
+    Serial.printf("[SHELLY] Codigo HTTP retornado: %d\n", httpCode);
+    
+    // Mostra o retorno de confirmação do Shelly no terminal
+    String resposta = http.getString();
+    Serial.print("[SHELLY] Resposta do firmware: ");
+    Serial.println(resposta);
+  } else {
+    Serial.printf("[ERRO] Falha de conexao: %s\n", http.errorToString(httpCode).c_str());
+  }
+  
+  http.end(); 
+}
 
 String paginaHTML() {
   return R"rawliteral(
@@ -17,7 +55,7 @@ String paginaHTML() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle LED ESP32-C3 (AP)</title>
+    <title>Controle Plug Shelly via ESP32</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f0f0f0; }
         button { width: 150px; height: 60px; font-size: 20px; margin: 10px; border: none; border-radius: 10px; cursor: pointer; }
@@ -26,10 +64,10 @@ String paginaHTML() {
     </style>
 </head>
 <body>
-    <h1>Controle do LED ESP32-C3</h1>
+    <h1>Controle do Plug Shelly via ESP32-C3</h1>
     <p>Modo Ponto de Acesso Direto</p>
-    <button class="on" onclick="fetch('/on')">LIGAR</button>
-    <button class="off" onclick="fetch('/off')">DESLIGAR</button>
+    <button class="on" onclick="fetch('/on')">LIGAR TOMADA</button>
+    <button class="off" onclick="fetch('/off')">DESLIGAR TOMADA</button>
 </body>
 </html>
 )rawliteral";
@@ -40,67 +78,53 @@ void handleRoot() {
 }
 
 void handleLedOn() { 
-  digitalWrite(LED_PIN, LOW);   // Lógica invertida: LOW acende o LED físico
-  Serial.println("[AÇÃO] Comando recebido: LED LIGADO");
+  digitalWrite(LED_PIN, LOW);   // Acende o LED do ESP32
+  Serial.println("[AÇÃO] Comando recebido: LIGAR");
+  enviarComandoShelly(true);    // Executa o POST para a tomada ligar
   server.send(200, "text/plain", "ON"); 
 }
 
 void handleLedOff() { 
-  digitalWrite(LED_PIN, HIGH);  // Lógica invertida: HIGH apaga o LED físico
-  Serial.println("[AÇÃO] Comando recebido: LED DESLIGADO");
+  digitalWrite(LED_PIN, HIGH);  // Apaga o LED do ESP32
+  Serial.println("[AÇÃO] Comando recebido: DESLIGAR");
+  enviarComandoShelly(false);   // Executa o POST para a tomada desligar
   server.send(200, "text/plain", "OFF"); 
 }
 
 void setup() {
-  // Inicializa a Serial
   Serial.begin(115200);
-
-  // Configura o LED (Começa desligado)
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH); 
 
-  // Aguarda até o monitor serial ser aberto
   uint32_t startTime = millis();
-  while (!Serial && (millis() - startTime < 3000)) { 
-    delay(10); 
-  }
+  while (!Serial && (millis() - startTime < 3000)) { delay(10); }
 
-  Serial.println("\n\n--- INICIALIZANDO SERVIDOR HTTP (MODO AP) ---");
+  Serial.println("\n\n--- INICIALIZANDO CONTROLADOR SHELLY (AP) ---");
 
-  // Configura o Wi-Fi para operar como Ponto de Acesso (AP)
   WiFi.mode(WIFI_AP);
   WiFi.disconnect();
-  delay(200); // Tempo para o rádio limpar estados anteriores
+  delay(200); 
   
-  // Inicializa a rede sem fio própria do chip
   WiFi.softAP(ap_ssid, ap_password);
 
-  // --- CORREÇÃO DO ESP32-C3: AGUARDA O IP DO AP FICAR VÁLIDO ---
-  // Evita ler o IP enquanto a interface DHCP interna do chip ainda está subindo
   IPAddress apIP = WiFi.softAPIP();
   while (apIP.toString() == "0.0.0.0") {
     delay(100);
     apIP = WiFi.softAPIP();
   }
 
-  // --- IMPRESSÃO ÚNICA DO IP ---
   Serial.println("[WIFI] Rede Wi-Fi criada com sucesso!");
-  Serial.print("[WIFI] SSID (Nome da Rede): ");
-  Serial.println(ap_ssid);
-  Serial.print("[INFO] Online | IP: ");
-  Serial.println(apIP); // Exibe 192.168.4.1 exatamente uma única vez
+  Serial.print("[INFO] Acesse o painel pelo IP: ");
+  Serial.println(apIP); 
 
-  // Rotas preparadas
   server.on("/", handleRoot);
   server.on("/on", handleLedOn);
   server.on("/off", handleLedOff);
 
-  // Inicializa o servidor web definitivamente aqui
   server.begin();
-  Serial.println("[SERVER] Servidor pronto! Acesse pelo navegador.");
+  Serial.println("[SERVER] Pronto para comandar o Shelly.");
 }
 
 void loop() {
-  // Processa continuamente as requisições
   server.handleClient();
 }
