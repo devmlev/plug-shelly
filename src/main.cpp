@@ -1,11 +1,11 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-// Configuração do Access Point
-const char* ssid = "ESP32C3_AP";
-const char* password = "12345678";
+// Configuração da rede Wi-Fi
+const char* ssid = "SKYZHE1K_5G";
+const char* password = "rHGMRSNqyFjY";
 
-// Pino do LED
+// LED onboard do ESP32-C3
 #define LED_PIN 8
 
 WebServer server(80);
@@ -49,7 +49,7 @@ String paginaHTML() {
     </style>
 </head>
 <body>
-    <h1>Controle do LED</h1>
+    <h1>Controle do LED ESP32-C3</h1>
 
     <button class="on" onclick="fetch('/on')">LIGAR</button>
     <button class="off" onclick="fetch('/off')">DESLIGAR</button>
@@ -74,20 +74,46 @@ void handleLedOff() {
 }
 
 void setup() {
+
   Serial.begin(115200);
 
   pinMode(LED_PIN, OUTPUT);
 
-  // Inicia com LED apagado
+  // LED inicialmente apagado
   digitalWrite(LED_PIN, HIGH);
 
-  // Cria o Access Point
-  WiFi.softAP(ssid, password);
+  // Nome que pode aparecer no roteador
+  WiFi.setHostname("ESP32-C3-LED");
+
+  // Conexão Wi-Fi
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
 
   Serial.println();
-  Serial.println("Access Point iniciado");
-  Serial.print("IP do AP: ");
-  Serial.println(WiFi.softAPIP());
+  Serial.print("Conectando ao WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println();
+  Serial.println("================================");
+  Serial.println("WiFi conectado!");
+
+  Serial.print("Hostname : ");
+  Serial.println(WiFi.getHostname());
+
+  Serial.print("IP       : ");
+  Serial.println(WiFi.localIP());
+
+  Serial.print("MAC      : ");
+  Serial.println(WiFi.macAddress());
+
+  Serial.print("URL      : http://");
+  Serial.println(WiFi.localIP());
+
+  Serial.println("================================");
 
   // Rotas HTTP
   server.on("/", handleRoot);
